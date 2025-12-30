@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Phase 3: Build (Infrastructure Provisioning)</h2>
+<p class="lead">Project: <strong>{{ project }}</strong>. Generating Infrastructure as Code (Terraform) for GCP.</p>
+
+{% if build %}
+<div class="card mb-4">
+    <div class="card-header">Generated Terraform Configuration</div>
+    <div class="card-body">
+        <p>File generated at: <code>{{ build.terraform_code_path }}</code></p>
+        <div class="alert alert-success">
+            {{ build.message }}
+        </div>
+        <ul class="nav nav-tabs" id="buildTabs" role="tablist">
+          <li class="nav-item">
+            <a class="nav-link active" id="tf-tab" data-bs-toggle="tab" href="#tf" role="tab" aria-controls="tf" aria-selected="true">Terraform (main.tf)</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="startup-tab" data-bs-toggle="tab" href="#startup" role="tab" aria-controls="startup" aria-selected="false">Startup Script (startup.sh)</a>
+          </li>
+        </ul>
+        <div class="tab-content" id="buildTabsContent">
+          <div class="tab-pane fade show active" id="tf" role="tabpanel" aria-labelledby="tf-tab">
+            <pre class="bg-light p-3 border rounded mt-3">
+provider "google" {
+  project = "demo-project"
+  region  = "us-central1"
+  ...
+}
+resource "google_compute_instance" "migrated-app" {
+  ...
+}
+            </pre>
+          </div>
+          <div class="tab-pane fade" id="startup" role="tabpanel" aria-labelledby="startup-tab">
+             <div class="alert alert-info mt-3">
+                This script runs automatically on the first boot of the migrated instance to restore configurations and applications.
+             </div>
+             <pre class="bg-dark text-white p-3 border rounded mt-3" style="max-height: 500px; overflow-y: auto;">{{ startup_script_content }}</pre>
+          </div>
+        </div>
+        <small class="text-muted">(Preview of generated code)</small>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between">
+    <a href="/guide/analyze?project={{ project }}" class="btn btn-secondary">Back</a>
+    <a href="/guide/deploy?project={{ project }}" class="btn btn-success">Proceed to Phase 4: Deploy</a>
+</div>
+
+{% else %}
+<div class="alert alert-danger">Analysis missing for this project. Please complete Phase 2 first.</div>
+<a href="/guide/analyze?project={{ project }}" class="btn btn-primary">Go to Analyze</a>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var triggerTabList = document.querySelectorAll('#buildTabs a');
+    triggerTabList.forEach(function (triggerEl) {
+        var tabTrigger = new bootstrap.Tab(triggerEl);
+        triggerEl.addEventListener('click', function (event) {
+            event.preventDefault();
+            tabTrigger.show();
+        });
+    });
+    var hash = window.location.hash;
+    if (hash) {
+        var tabEl = document.querySelector('#buildTabs a[href="' + hash + '"]');
+        if (tabEl) {
+            var tab = new bootstrap.Tab(tabEl);
+            tab.show();
+        }
+    }
+});
+</script>
+{% endblock %}

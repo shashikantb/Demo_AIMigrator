@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Phase 2: Analyze (Assessment & Recommendation)</h2>
+<p class="lead">Project: <strong>{{ project }}</strong>. Based on the scanned data, here is the recommended migration strategy.</p>
+
+{% if scan %}
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">Source Profile</div>
+            <div class="card-body">
+                <ul>
+                    <li><strong>Hostname:</strong> {{ scan.hostname }}</li>
+                    <li><strong>Specs:</strong> {{ scan.cpu_cores }} vCPU, {{ scan.memory_gb }} GB RAM</li>
+                    <li><strong>Key Services:</strong> {{ scan.running_services|join(', ') }}</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card mb-4 border-primary">
+            <div class="card-header bg-primary text-white">Recommendation</div>
+            <div class="card-body">
+                <h4 class="card-title">{{ analysis.migration_strategy }}</h4>
+                <p class="card-text">Target Instance: <strong>{{ analysis.recommended_gcp_instance }}</strong></p>
+                <p class="card-text">Est. Cost: <strong>${{ analysis.estimated_cost_monthly }}/mo</strong></p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+        <span>Application Architecture Blueprint</span>
+        <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#addComponentModal">Add Component</button>
+    </div>
+    <div class="card-body">
+        
+        <!-- Mermaid Diagram Container -->
+        {% if analysis.architecture_diagram %}
+        <div class="mb-4 text-center border p-3 bg-light rounded">
+            <h5>Architecture Visualization</h5>
+            <div class="mermaid">
+                {{ analysis.architecture_diagram }}
+            </div>
+        </div>
+        {% endif %}
+
+        <p class="text-muted">Review and refine the detected application components before building.</p>
+        <div class="table-responsive">
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Component / Service</th>
+                        <th>Type</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="componentTableBody">
+                    {% for proc in scan.pm2_processes %}
+                    <tr>
+                        <td>{{ proc.name }} <span class="badge badge-info">PM2 App</span></td>
+                        <td>Application</td>
+                        <td><button class="btn btn-sm btn-danger" onclick="removeComponent('{{ proc.name }}','Application')">Remove</button></td>
+                    </tr>
+                    {% endfor %}
+
+                    {% for app in scan.generic_apps %}
+                    <tr>
+                        <td>{{ app.name or app.service_name }} <span class="badge badge-secondary">App</span></td>
+                        <td>Application</td>
+                        <td><button class="btn btn-sm btn-danger" onclick="removeComponent('{{ app.name or app.service_name }}','Application')">Remove</button></td>
+                    </tr>
+                    {% endfor %}
+
+                    {% for service in scan.running_services %}
+                    <tr>
+                        <td>{{ service }}</td>
+                        <td>Service</td>
+                        <td><button class="btn btn-sm btn-danger" onclick="removeComponent('{{ service }}','Service')">Remove</button></td>
+                    </tr>
+                    {% endfor %}
+                    <!-- Dynamically added components will appear here -->
+                    {% if analysis.added_components %}
+                        {% for comp in analysis.added_components %}
+                        <tr>
+                            <td>{{ comp.name }}</td>
+                            <td>{{ comp.type }}</td>
+                            <td><button class="btn btn-sm btn-danger" onclick="removeComponent('{{ comp.name }}','{{ comp.type }}')">Remove</button></td>
+                        </tr>
+                        {% endfor %}
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add Component Modal -->
+<div class="modal fade" id="addComponentModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Architecture Component</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addComponentForm">
+                    <div class="form-group">
+                        <label>Component Name</label>
+                        <input type="text" class="form-control" id="compName" placeholder="e.g. Redis, Memcached" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Type</label>
+                        <select class="form-control" id="compType">
+                            <option value="Service">Service</option>
+                            <option value="Database">Database</option>
+                            <option value="LoadBalancer">Load Balancer</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="addComponent()">Add Component</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function addComponent() {
+    const name = document.getElementById('compName').value;
+    const type = document.getElementById('compType').value;
+    
+    if(!name) return;
+
+    const response = await fetch('/api/analyze/add_component?project={{ project }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name, type: type})
+    });
+
+    if(response.ok) {
+        window.location.reload();
+    }
+}
+
+async function removeComponent(name, type) {
+    if(!confirm('Remove ' + name + '?')) return;
+    
+    const response = await fetch('/api/analyze/remove_component?project={{ project }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name, type: type})
+    });
+
+    if(response.ok) {
+        window.location.reload();
+    }
+}
+</script>
+
+{% if analysis.risks %}
+<div class="alert alert-warning">
+    <strong>Identified Risks:</strong>
+    <ul>
+        {% for risk in analysis.risks %}
+        <li>{{ risk }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div class="d-flex justify-content-between">
+    <a href="/guide/scan?project={{ project }}" class="btn btn-secondary">Back</a>
+    <a href="/guide/build?project={{ project }}" class="btn btn-success">Proceed to Phase 3: Build</a>
+</div>
+
+{% else %}
+<div class="alert alert-danger">No scan data found for this project. Please complete Phase 1 first.</div>
+<a href="/guide/scan?project={{ project }}" class="btn btn-primary">Go to Scan</a>
+{% endif %}
+
+{% endblock %}

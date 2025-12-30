@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Phase 1: Scan (Discovery & Inventory)</h2>
+<p class="lead">Project: <strong>{{ project }}</strong>. Run the agent on your source machine to collect data.</p>
+
+<div class="card mb-4">
+    <div class="card-header">Step 1: Install & Run Agent</div>
+    <div class="card-body">
+        <p>Copy and paste the following command into your source server's terminal:</p>
+        <div class="bg-dark text-white p-3 rounded position-relative">
+            <code>curl -sL {{ host_url }}/static/agent.py | python3 - "{{ host_url }}/api/scan/submit?project={{ project }}"</code>
+            <button class="btn btn-sm btn-light position-absolute top-0 end-0 m-2" onclick="navigator.clipboard.writeText(this.previousElementSibling.innerText)">Copy</button>
+        </div>
+        <small class="text-muted">This script requires Python 3. It gathers OS, CPU, RAM, and Service details and sends them back here.</small>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        Step 2: Review Scanned Data
+        <button id="refreshBtn" class="btn btn-sm btn-outline-primary float-end">Check for Data</button>
+    </div>
+    <div class="card-body" id="scan-status">
+        {% if scan_result %}
+            <div class="alert alert-success">Data Received!</div>
+            <table class="table">
+                <tr><th>Hostname</th><td>{{ scan_result.hostname }}</td></tr>
+                <tr><th>OS</th><td>{{ scan_result.os_info }}</td></tr>
+                <tr><th>CPU</th><td>{{ scan_result.cpu_cores }} Cores</td></tr>
+                <tr><th>Memory</th><td>{{ scan_result.memory_gb }} GB</td></tr>
+                <tr><th>Disk</th><td>{{ scan_result.disk_space_gb }}</td></tr>
+                <tr><th>Services</th><td>{{ scan_result.running_services|join(', ') }}</td></tr>
+                
+                <tr><th>Users</th><td>{{ scan_result.system_users|length }} Found ({{ scan_result.system_users|join(', ') }})</td></tr>
+                <tr><th>Packages</th><td>{{ scan_result.installed_packages|length }} Found</td></tr>
+                
+                {% if scan_result.crontabs %}
+                <tr><th>Crontabs</th><td>
+                    <ul>
+                    {% for user in scan_result.crontabs.keys() %}
+                        <li>{{ user }}</li>
+                    {% endfor %}
+                    </ul>
+                </td></tr>
+                {% endif %}
+
+                {% if scan_result.pm2_processes %}
+                <tr><th>PM2 Processes</th><td>
+                    <div class="list-group">
+                    {% for proc in scan_result.pm2_processes %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1">{{ proc.name }}</h5>
+                                <small class="text-muted">{{ proc.status }}</small>
+                            </div>
+                            <p class="mb-1">Path: <code>{{ proc.path }}</code></p>
+                            
+                            {% if scan_result.custom_app_configs and scan_result.custom_app_configs[proc.name] %}
+                            <small>Captured Configs:</small>
+                            <ul>
+                                {% for filename, content in scan_result.custom_app_configs[proc.name].items() %}
+                                {% set config_id = proc.name ~ '-' ~ loop.index %}
+                                <li>
+                                    {{ filename }}
+                                    <button 
+                                        class="btn btn-sm btn-outline-info ml-2 py-0" 
+                                        data-config-id="{{ config_id }}" 
+                                        data-target-id="app-content-{{ config_id }}" 
+                                        data-app="{{ proc.name }}" 
+                                        data-filename="{{ filename }}" 
+                                        onclick="openConfigModal(this)">
+                                        View
+                                    </button>
+                                    <div id="app-content-{{ config_id }}" style="display:none;">{{ content }}</div>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                    </div>
+                </td></tr>
+                {% endif %}
+
+                {% if scan_result.generic_apps %}
+                <tr><th>Applications (systemd)</th><td>
+                    <div class="list-group">
+                    {% for app in scan_result.generic_apps %}
+                        {% set app_label = app.name or app.service_name %}
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1">{{ app_label }}</h5>
+                                <small class="text-muted">{{ app.service_name }}</small>
+                            </div>
+                            {% if app.app_path %}
+                            <p class="mb-1">Path: <code>{{ app.app_path }}</code></p>
+                            {% endif %}
+
+                            {% if app.files %}
+                            <small>Captured Files:</small>
+                            <ul>
+                                {% for filename, content in app.files.items() %}
+                                {% set config_id = app_label ~ '-generic-' ~ loop.index %}
+                                <li>
+                                    {{ filename }}
+                                    <button
+                                        class="btn btn-sm btn-outline-info ml-2 py-0"
+                                        data-config-id="{{ config_id }}"
+                                        data-target-id="app-content-{{ config_id }}"
+                                        data-app="{{ app_label }}"
+                                        data-filename="{{ filename }}"
+                                        onclick="openConfigModal(this)">
+                                        View
+                                    </button>
+                                    <div id="app-content-{{ config_id }}" style="display:none;">{{ content }}</div>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                    </div>
+                </td></tr>
+                {% endif %}
+
+                {% if scan_result.config_files %}
+                <tr><th>Captured System Configs</th><td>
+                    <ul>
+                    {% for path, content in scan_result.config_files.items() %}
+                        {% set sys_id = 'sys-' ~ loop.index %}
+                        <li>
+                            {{ path }} 
+                            <button 
+                                class="btn btn-sm btn-outline-info ml-2" 
+                                data-target-id="content-{{ sys_id }}" 
+                                data-path="{{ path }}" 
+                                onclick="openConfigModal(this)">
+                                View
+                            </button>
+                            <div id="content-{{ sys_id }}" style="display:none;">{{ content }}</div>
+                        </li>
+                    {% endfor %}
+                    </ul>
+                </td></tr>
+                {% endif %}
+
+                <!-- Modal for Config Viewing -->
+                <div class="modal fade" id="configModal" tabindex="-1" role="dialog">
+                  <div class="modal-dialog modal-lg" role="document">
+                    <div class="modal-content">
+                      <div class="modal-header">
+                        <h5 class="modal-title" id="configModalTitle">Config File</h5>
+                        <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">
+                          <span aria-hidden="true">&times;</span>
+                        </button>
+                      </div>
+                      <div class="modal-body">
+                        <pre id="configModalContent" style="background: #f8f9fa; padding: 15px; border-radius: 5px;"></pre>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <script>
+                function openConfigModal(button) {
+                    var targetId = button.getAttribute('data-target-id');
+                    var path = button.getAttribute('data-path');
+                    var appName = button.getAttribute('data-app');
+                    var filename = button.getAttribute('data-filename');
+                    var contentElement = document.getElementById(targetId);
+                    if (!contentElement) {
+                        return;
+                    }
+                    var content = contentElement.textContent;
+                    var title = path;
+                    if (!title && appName && filename) {
+                        title = appName + ' / ' + filename;
+                    }
+                    document.getElementById('configModalTitle').textContent = title || 'Config File';
+                    document.getElementById('configModalContent').textContent = content;
+                    var modal = new bootstrap.Modal(document.getElementById('configModal'));
+                    modal.show();
+                }
+                
+                function showAppConfig(appName, filename, configId) {
+                    var button = document.querySelector('[data-config-id=\"' + configId + '\"]');
+                    if (!button) {
+                        return;
+                    }
+                    openConfigModal(button);
+                }
+                </script>
+            </table>
+            <a href="/guide/analyze?project={{ project }}" class="btn btn-success">Proceed to Phase 2: Analyze</a>
+        {% else %}
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status" style="display:none" id="spinner"></div>
+                <p id="waiting-text">Waiting for agent data... Run the command above.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('refreshBtn').addEventListener('click', function() {
+    location.reload();
+});
+
+// Auto-poll every 5 seconds if no result
+{% if not scan_result %}
+setInterval(function() {
+    fetch('/api/scan/status?project={{ project }}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.ready) {
+                location.reload();
+            }
+        });
+}, 3000);
+{% endif %}
+</script>
+{% endblock %}

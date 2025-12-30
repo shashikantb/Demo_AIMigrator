@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+paramiko
+jinja2
+pydantic
+python-dotenv
+requests
+typer
+rich

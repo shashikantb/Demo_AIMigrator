@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="p-5 mb-4 bg-light rounded-3">
+        <div class="container-fluid py-5">
+            <h1 class="display-5 fw-bold">Migration Automater</h1>
+            <p class="col-md-8 fs-4">Your end-to-end intelligent platform to streamline application migrations from On-Premise to Cloud.</p>
+            <p>Follow the guided steps to Scan, Analyze, Build, and Deploy your application.</p>
+            <form class="row g-3 align-items-center" action="/guide/scan" method="get">
+                <div class="col-auto">
+                    <label for="projectInput" class="col-form-label">Project Name</label>
+                </div>
+                <div class="col-auto">
+                    <input type="text" id="projectInput" name="project" class="form-control" placeholder="my-migration-project" required>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary btn-lg">Start Migration</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="row align-items-md-stretch">
+        <div class="col-md-6">
+            <div class="h-100 p-5 text-white bg-dark rounded-3">
+                <h2>How it works</h2>
+                <p>Install our lightweight agent on your source server. It collects configuration data and securely sends it to this dashboard. We then analyze the best cloud fit for you.</p>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="h-100 p-5 bg-light border rounded-3">
+                <h2>Supported Targets</h2>
+                <p>Currently supporting migration to Google Cloud Platform (GCP). AWS and Azure support coming soon.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
